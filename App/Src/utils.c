@@ -59,7 +59,12 @@ void __attribute__((weak)) app_polling_task(void)
     // with this name that performs any needed application keep-alive processes
     // when blocking functions such as i_getchar_blocking() are called.
 }
-    
+
+void __attribute__((weak)) v_app_polling_task(void)
+{
+    // Weak placeholder; application supplies strong definition (e.g. app_main.c).
+}
+
 /******************************************************************************
  * int i_getchar_blocking(void)
  *
@@ -80,6 +85,65 @@ int i_getchar_blocking(void)
     while (i_char <= 0);
 
     return i_char;
+}
+
+/******************************************************************************
+ * int i_getchar_blocking_with_timeout(uint32_t u32_milliseconds)
+ *
+ * Poll STDIN (getchar) with cooperative v_app_polling_task until a character
+ * is available or @p u32_milliseconds elapses (HAL_GetTick resolution).
+ *
+ * Returns:     Positive character if received before timeout (including ESC).
+ *              @c 0 if timeout with no character (same as empty getchar).
+ ******************************************************************************/
+
+int i_getchar_blocking_with_timeout(uint32_t u32_milliseconds)
+{
+    uint32_t u32_t0;
+    int i_char;
+
+    u32_t0 = HAL_GetTick();
+    do
+    {
+        v_app_polling_task();
+        i_char = getchar();
+        if (i_char > 0)
+        {
+            return i_char;
+        }
+    }
+    while (ELAPSED_TIME(u32_t0) < u32_milliseconds);
+
+    return 0;
+}
+
+/******************************************************************************
+ * void v_app_delay_ms(uint32_t u32_milliseconds)
+ *
+ * Delay for at least @p u32_milliseconds (1 ms tick resolution via HAL_GetTick).
+ * Each spin iteration calls v_app_polling_task() (weak stub in this file;
+ * strong definition typically in app_main.c) so the cooperative loop keeps
+ * running — same idea as i_getchar_blocking().
+ *
+ * Notes:
+ * - Pass @c 0 for no delay (no call to v_app_polling_task).
+ * - Uses unsigned tick difference; suitable for delays short vs. HAL tick wrap.
+ ******************************************************************************/
+
+void v_app_delay_ms(uint32_t u32_milliseconds)
+{
+    uint32_t u32_t0;
+
+    if (u32_milliseconds == 0u)
+    {
+        return;
+    }
+
+    u32_t0 = HAL_GetTick();
+    while (ELAPSED_TIME(u32_t0) < u32_milliseconds)
+    {
+        v_app_polling_task();
+    }
 }
 
 /******************************************************************************

@@ -56,8 +56,8 @@ extern "C" {
 //extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim6;
 extern TIM_HandleTypeDef htim7;
+extern TIM_HandleTypeDef htim14;
 //extern TIM_HandleTypeDef htim16;
-//extern TIM_HandleTypeDef htim17;
 extern RTC_HandleTypeDef hrtc;
 //extern IWDG_HandleTypeDef hiwdg;
 //extern I2C_HandleTypeDef hi2c1;
@@ -78,8 +78,6 @@ extern SPI_HandleTypeDef hspi1;
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
 
-#define DEBUG_UART_HANDLE   huart2
-
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
@@ -90,18 +88,26 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define LCD_MOSI_Pin GPIO_PIN_12
+#define LCD_MOSI_GPIO_Port GPIOC
 #define NUCLEO_BUTTON_Pin GPIO_PIN_13
 #define NUCLEO_BUTTON_GPIO_Port GPIOC
 #define MCO_Pin GPIO_PIN_0
 #define MCO_GPIO_Port GPIOF
 #define LED_STRIP_3_TX_Pin GPIO_PIN_0
 #define LED_STRIP_3_TX_GPIO_Port GPIOA
+#define MIC_CK_Pin GPIO_PIN_1
+#define MIC_CK_GPIO_Port GPIOA
 #define DEBUG_TX_Pin GPIO_PIN_2
 #define DEBUG_TX_GPIO_Port GPIOA
 #define DEBUG_RX_Pin GPIO_PIN_3
 #define DEBUG_RX_GPIO_Port GPIOA
+#define MIC_WS_Pin GPIO_PIN_4
+#define MIC_WS_GPIO_Port GPIOA
 #define NUCLEO_LED_Pin GPIO_PIN_5
 #define NUCLEO_LED_GPIO_Port GPIOA
+#define MIC_SD_Pin GPIO_PIN_7
+#define MIC_SD_GPIO_Port GPIOA
 #define LED_STRIP_1_TX_Pin GPIO_PIN_4
 #define LED_STRIP_1_TX_GPIO_Port GPIOC
 #define LED_STRIP_2_TX_Pin GPIO_PIN_2
@@ -110,6 +116,10 @@ void Error_Handler(void);
 #define SWDATA_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14
 #define SWCLK_GPIO_Port GPIOA
+#define LCD_CLK_Pin GPIO_PIN_3
+#define LCD_CLK_GPIO_Port GPIOB
+#define LCD_MISO_Pin GPIO_PIN_4
+#define LCD_MISO_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

@@ -129,7 +129,12 @@ extern void v_interrupt_primask_restore(uint32_t u32_primask_saved);
 
 //------------------------------------------------------------------------------
 
+/** Cooperative millisecond delay (HAL_GetTick): spins until elapsed, calling v_app_polling_task each iteration. */
+extern void v_app_delay_ms(uint32_t u32_milliseconds);
+
 extern int i_getchar_blocking(void);                            // Get character from STDIN, blocking until char received
+/** Like i_getchar_blocking but returns as soon as a char is read, or @c 0 after @p u32_milliseconds with none (polls v_app_polling_task). */
+extern int i_getchar_blocking_with_timeout(uint32_t u32_milliseconds);
 extern int i_getline(char *p_c_entry, uint16_t u16_length_limit); // Get 1-line text entry from STDIN (blocking)
 extern void v_newline(void);                                    // Send CR/LF sequence to STDOUT
 extern void v_conditional_newline(void);                        // Send CR/LF if not at end of line

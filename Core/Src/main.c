@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "dma.h"
+#include "i2s.h"
 #include "rtc.h"
 #include "spi.h"
 #include "tim.h"
@@ -96,10 +97,12 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
   MX_USART4_UART_Init();
-  MX_SPI1_Init();
   MX_TIM6_Init();
   MX_TIM7_Init();
   MX_RTC_Init();
+  MX_I2S1_Init();
+  MX_SPI3_Init();
+  MX_TIM14_Init();
   /* USER CODE BEGIN 2 */
 
   // Disable I/O buffering for STDxxx streams, so that I/O data is

@@ -10,6 +10,7 @@
 
 #include "main.h"
 #include "debug_menu.h"
+#include "led_strip_control.h"
 
 /******************************************************************************
  * __io_putchar() and __io_getchar() definitions here override the weak
@@ -42,6 +43,21 @@ int __io_getchar(void)
     }
 
     return 0;
+}
+
+/******************************************************************************
+ * HAL UART callbacks (application-owned). Forward LED strip UART/DMA events;
+ * add other UART users here when needed.
+ ******************************************************************************/
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+    led_strip_uart_tx_complete(huart);
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+    led_strip_uart_error(huart);
 }
 
 /******************************************************************************
