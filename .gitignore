@@ -1,0 +1,19 @@
+# STM32CubeIDE / Eclipse — local metadata (project files like .cproject / .ioc stay tracked)
+.settings/
+
+# Build outputs
+Debug/
+Release/
+
+# Optional local CubeIDE / toolchain paths (if present)
+*.cfg.local
+
+# -----------------------------------------------------------------------------
+# Drivers/: only STM32CubeMX-supplied CMSIS + HAL are versioned here.
+# Other vendor/third-party trees under Drivers/ are ignored until wired in.
+# -----------------------------------------------------------------------------
+/Drivers/*
+!/Drivers/CMSIS/
+!/Drivers/CMSIS/**
+!/Drivers/STM32G0xx_HAL_Driver/
+!/Drivers/STM32G0xx_HAL_Driver/**
