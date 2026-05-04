@@ -15,5 +15,7 @@ Release/
 /Drivers/*
 !/Drivers/CMSIS/
 !/Drivers/CMSIS/**
+# CMSIS-DSP: large ARM tree; keep locally / IDE exclude-from-build until you add Lib or sources to the build.
+/Drivers/CMSIS/DSP/
 !/Drivers/STM32G0xx_HAL_Driver/
 !/Drivers/STM32G0xx_HAL_Driver/**

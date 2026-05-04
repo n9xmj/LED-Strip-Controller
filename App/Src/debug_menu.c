@@ -24,9 +24,6 @@ void v_app_polling_task(void);
 /** Max wait in @ref led_strip_destroy during LED round-trip test (ms). */
 #define DEBUG_LED_DESTROY_WAIT_MS   (500u)
 
-/** Inter-frame delay for strip-1 marquee (also STDIN poll window; ms). */
-#define DEBUG_LED_MARQUEE_STEP_MS     (200u)
-
 /******************************************************************************
  *
  ******************************************************************************/
@@ -345,6 +342,15 @@ static void v_debug_led_strip3_off(void)
 #define DEBUG_LED_MARQUEE_G     ((uint8_t)((255u * 50u) / 100u))
 #define DEBUG_LED_MARQUEE_B     ((uint8_t)((255u * 25u) / 100u))
 
+/** Step timing for @ref v_debug_led_marquee_spoke_rgb_spin (debug only). */
+#define MARQUEE_DELAY_MS_MIN            (10u)
+#define MARQUEE_DELAY_MS_MAX            (1000u)
+#define MARQUEE_DELAY_MS_FINE           (10u)
+#define MARQUEE_DELAY_MS_COARSE         (50u)
+#define MARQUEE_DELAY_MS_THRESH         (150u)
+#define MARQUEE_DELAY_MS_DEFAULT        (200u)
+#define MARQUEE_DELAY_MS_POLL_FOREVER   (UINT32_MAX)
+
 /**
  * @brief Wait for UART DMA TX idle or timeout; calls v_app_polling_task while spinning.
  */
@@ -368,20 +374,89 @@ static bool v_debug_led_wait_tx_done(led_strip_handle_t *p_x_handle)
 }
 
 /**
- * @brief Three LEDs spaced by 3 indices, colors R/G/B at fixed levels; base advances each step.
- *
- * @details Uses @ref i_getchar_blocking_with_timeout between steps. ESC (0x1B) stops the loop.
- *          Caller owns create/destroy; strip length must be >= 3.
+ * @brief Paint one RGB-spoke frame for @p u16_base and transmit.
  */
-static void v_debug_led_marquee_spoke_rgb_spin(led_strip_handle_t *p_x_handle,
-                                               uint32_t u32_step_delay_ms)
+static bool v_debug_led_marquee_render(led_strip_handle_t *p_x_handle,
+                                      uint16_t u16_n,
+                                      uint16_t u16_base)
 {
     led_rgbw_pixel_t *p_x;
-    uint16_t u16_n;
-    uint16_t u16_base;
-    int i_key;
+    uint16_t i;
+    led_strip_err_t x_err;
+    uint16_t i_r;
+    uint16_t i_g;
+    uint16_t i_b;
 
-    if (p_x_handle == NULL || !p_x_handle->b_initialized || p_x_handle->p_x_pixel == NULL)
+    p_x = p_x_handle->p_x_pixel;
+    for (i = 0u; i < u16_n; i++)
+    {
+        p_x[i].u32_all = 0u;
+    }
+
+    i_r = (uint16_t) (u16_base % u16_n);
+    i_g = (uint16_t) ((u16_base + 3u) % u16_n);
+    i_b = (uint16_t) ((u16_base + 6u) % u16_n);
+
+    p_x[i_r].u8_red = DEBUG_LED_MARQUEE_R;
+    p_x[i_r].u8_green = 0u;
+    p_x[i_r].u8_blue = 0u;
+    p_x[i_r].u8_white = 0u;
+
+    p_x[i_g].u8_red = 0u;
+    p_x[i_g].u8_green = DEBUG_LED_MARQUEE_G;
+    p_x[i_g].u8_blue = 0u;
+    p_x[i_g].u8_white = 0u;
+
+    p_x[i_b].u8_red = 0u;
+    p_x[i_b].u8_green = 0u;
+    p_x[i_b].u8_blue = DEBUG_LED_MARQUEE_B;
+    p_x[i_b].u8_white = 0u;
+
+    x_err = led_strip_update(p_x_handle);
+    if (x_err != LED_STRIP_ERR_OK)
+    {
+        printf("marquee led_strip_update: %s (%d)\r\n", p_c_led_strip_err_str(x_err), (int) x_err);
+        return false;
+    }
+
+    return v_debug_led_wait_tx_done(p_x_handle);
+}
+
+/**
+ * @brief Advance marquee phase index by @p i16_dir (+1 or -1), wrap to [0, n-1].
+ */
+static void v_debug_led_marquee_step_index(int16_t *p_i16_base, int16_t i16_dir, uint16_t u16_n)
+{
+    *p_i16_base += i16_dir;
+    while (*p_i16_base < 0)
+    {
+        *p_i16_base += (int16_t) u16_n;
+    }
+    while (*p_i16_base >= (int16_t) u16_n)
+    {
+        *p_i16_base -= (int16_t) u16_n;
+    }
+}
+
+/**
+ * @brief RGB spoke marquee: interactive delay, pause, single-step on <Sp>.
+ *
+ * @param[in] p_c_strip_tag  e.g. VSTR(LED_CHANNEL_1_UART_HANDLE) for the banner line.
+ */
+static void v_debug_led_marquee_spoke_rgb_spin(led_strip_handle_t *p_x_handle,
+                                               const char *p_c_strip_tag)
+{
+    uint16_t u16_n;
+    int16_t i16_base;
+    uint32_t u32_step_ms;
+    int16_t i16_direction = 1;
+    bool b_paused;
+    int i_key;
+    uint32_t u32_poll_ms;
+    bool b_skip_advance;
+
+    if ((p_x_handle == NULL) || !p_x_handle->b_initialized || (p_x_handle->p_x_pixel == NULL)
+        || (p_c_strip_tag == NULL))
     {
         return;
     }
@@ -393,62 +468,108 @@ static void v_debug_led_marquee_spoke_rgb_spin(led_strip_handle_t *p_x_handle,
         return;
     }
 
-    p_x = p_x_handle->p_x_pixel;
-    u16_base = 0u;
-    printf("Marquee: ESC to stop; other keys shorten step wait only.\r\n");
+    printf("Marquee demo on strip %s\r\n", p_c_strip_tag);
+    printf("'[':Slower ']':Faster '/':Reverse direction '\\':Run/Stop <Sp>:Single-step <ESC>:Exit\r\n");
+
+    i16_base = 0;
+    u32_step_ms = MARQUEE_DELAY_MS_DEFAULT;
+    b_paused = false;
 
     for (;;)
     {
-        led_strip_err_t x_err;
-        uint16_t i;
-
-        for (i = 0u; i < u16_n; i++)
+        if (!b_paused)
         {
-            p_x[i].u32_all = 0u;
+            if (!v_debug_led_marquee_render(p_x_handle, u16_n, i16_base))
+            {
+                break;
+            }
         }
 
-        {
-            uint16_t i_r = (uint16_t) (u16_base % u16_n);
-            uint16_t i_g = (uint16_t) ((u16_base + 3u) % u16_n);
-            uint16_t i_b = (uint16_t) ((u16_base + 6u) % u16_n);
+        u32_poll_ms = b_paused ? MARQUEE_DELAY_MS_POLL_FOREVER : u32_step_ms;
+        i_key = i_getchar_blocking_with_timeout(u32_poll_ms);
 
-            p_x[i_r].u8_red = DEBUG_LED_MARQUEE_R;
-            p_x[i_r].u8_green = 0u;
-            p_x[i_r].u8_blue = 0u;
-            p_x[i_r].u8_white = 0u;
-
-            p_x[i_g].u8_red = 0u;
-            p_x[i_g].u8_green = DEBUG_LED_MARQUEE_G;
-            p_x[i_g].u8_blue = 0u;
-            p_x[i_g].u8_white = 0u;
-
-            p_x[i_b].u8_red = 0u;
-            p_x[i_b].u8_green = 0u;
-            p_x[i_b].u8_blue = DEBUG_LED_MARQUEE_B;
-            p_x[i_b].u8_white = 0u;
-        }
-
-        x_err = led_strip_update(p_x_handle);
-        if (x_err != LED_STRIP_ERR_OK)
-        {
-            printf("marquee led_strip_update: %s (%d)\r\n", p_c_led_strip_err_str(x_err), (int) x_err);
-            break;
-        }
-
-        if (!v_debug_led_wait_tx_done(p_x_handle))
-        {
-            break;
-        }
-
-        i_key = i_getchar_blocking_with_timeout(u32_step_delay_ms);
         if (i_key == 0x1B)
         {
             break;
         }
 
-        u16_base = (uint16_t) ((u16_base + 1u) % u16_n);
+        b_skip_advance = false;
+
+        if (i_key == '[')
+        {
+            if (u32_step_ms < MARQUEE_DELAY_MS_THRESH)
+            {
+                u32_step_ms += MARQUEE_DELAY_MS_FINE;
+            }
+            else
+            {
+                u32_step_ms += MARQUEE_DELAY_MS_COARSE;
+            }
+            if (u32_step_ms > MARQUEE_DELAY_MS_MAX)
+            {
+                u32_step_ms = MARQUEE_DELAY_MS_MAX;
+            }
+            printf("Step interval: %u mS\r\n", (unsigned) u32_step_ms);
+        }
+        else if (i_key == ']')
+        {
+            if (u32_step_ms > MARQUEE_DELAY_MS_THRESH)
+            {
+                u32_step_ms -= MARQUEE_DELAY_MS_COARSE;
+            }
+            else
+            {
+                u32_step_ms -= MARQUEE_DELAY_MS_FINE;
+            }
+            if (u32_step_ms < MARQUEE_DELAY_MS_MIN)
+            {
+                u32_step_ms = MARQUEE_DELAY_MS_MIN;
+            }
+            printf("Step interval: %u mS\r\n", (unsigned) u32_step_ms);
+        }
+        else if (i_key == '/')
+        {
+            i16_direction = -i16_direction;
+            printf("Step direction: %s\r\n", i16_direction > 0 ? "Forward" : "Reverse");
+        }
+        else if (i_key == '\\')
+        {
+            b_paused = !b_paused;
+            if (b_paused)
+            {
+                printf("- Paused -\r\n");
+            }
+            else
+            {
+                printf("Running, step interval:%u mS\r\n", (unsigned) u32_step_ms);
+            }
+        }
+        else if (i_key == ' ')
+        {
+            b_paused = true;
+            v_debug_led_marquee_step_index(&i16_base, i16_direction, u16_n);
+            if (!v_debug_led_marquee_render(p_x_handle, u16_n, (uint16_t) i16_base))
+            {
+                break;
+            }
+            printf("- Step -\r\n");
+            b_skip_advance = true;
+        }
+
+        if ((!b_paused) && (!b_skip_advance))
+        {
+            v_debug_led_marquee_step_index(&i16_base, i16_direction, u16_n);
+        }
     }
 }
+
+#undef MARQUEE_DELAY_MS_MIN
+#undef MARQUEE_DELAY_MS_MAX
+#undef MARQUEE_DELAY_MS_FINE
+#undef MARQUEE_DELAY_MS_COARSE
+#undef MARQUEE_DELAY_MS_THRESH
+#undef MARQUEE_DELAY_MS_DEFAULT
+#undef MARQUEE_DELAY_MS_POLL_FOREVER
 
 #undef DEBUG_LED_MARQUEE_R
 #undef DEBUG_LED_MARQUEE_G
@@ -464,8 +585,6 @@ static void v_debug_led_strip1_marquee(void)
     bool b_created;
     uint16_t i;
     led_rgbw_pixel_t x_pixels[DEBUG_LED_STRIP1_PIXEL_COUNT] = { 0 };
-
-    printf("Marquee on %s\r\n", VSTR(LED_CHANNEL_1_UART_HANDLE));
 
     b_created = false;
 
@@ -486,7 +605,7 @@ static void v_debug_led_strip1_marquee(void)
 
     b_created = true;
 
-    v_debug_led_marquee_spoke_rgb_spin(&x_handle, DEBUG_LED_MARQUEE_STEP_MS);
+    v_debug_led_marquee_spoke_rgb_spin(&x_handle, VSTR(LED_CHANNEL_1_UART_HANDLE));
 
     for (i = 0u; i < DEBUG_LED_STRIP1_PIXEL_COUNT; i++)
     {
